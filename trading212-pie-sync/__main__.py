@@ -63,9 +63,11 @@ def main():
 
     n.open_dashboard(args.username, args.password)
     n.select_pie(args.pie)
-    for instrument, distrubution in data["instruments"].items():
-        n.rebalance_instrument(instrument, distrubution)
-
+    current_instruments = n.get_current_instruments_tickers()
+    # for ticker, distrubution in data["instruments"].items():
+    #     n.rebalance_instrument(ticker, distrubution)
+    for ticker in current_instruments:
+        n.remove_instrument(ticker)
     # n.wait_for_browser_closed()
 
 

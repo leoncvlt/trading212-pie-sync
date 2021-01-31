@@ -130,12 +130,15 @@ class Navigator:
         field.send_keys(str(target))
         field.send_keys(Keys.RETURN)
 
+    def get_current_instruments_tickers(self):
+        ticker_selector = ".bucket-instrument-personalisation .instrument-logo-name"
+        return [
+            element.get_attribute("textContent")
+            for element in self.driver.find_elements_by_css_selector(ticker_selector)
+        ]
+
     def add_instrument(self, ticker):
-        current_instruments_no = len(
-            self.driver.find_elements_by_css_selector(
-                ".bucket-instrument-personalisation"
-            )
-        )
+        current_instruments_num = len(self.get_current_instruments_tickers())
         add_slice_button = ".button.add-slice-button"
         self.driver.find_element_by_css_selector(add_slice_button).click()
 
@@ -153,15 +156,33 @@ class Navigator:
             instruments_list_found_ticker(instruments, ticker)
         )
         # TODO: fix occasional staleness
-        instrument.find_element_by_css_selector(".add-to-bucket").click()
+        add_button = instrument.find_element_by_css_selector(".add-to-bucket")
+        WebDriverWait(self.driver, 10).until_not(EC.staleness_of(add_button))
+        add_button.click()
         confirm_button = ".bucket-add-slices-footer > .button"
         self.driver.find_element_by_css_selector(confirm_button).click()
 
         WebDriverWait(self.driver, 10).until(
-            lambda d: len(
-                d.find_elements_by_css_selector(".bucket-instrument-personalisation")
-            )
-            == current_instruments_no + 1
+            lambda d: len(self.get_current_instruments_tickers())
+            == current_instruments_num + 1
+        )
+
+    def remove_instrument(self, ticker):
+        current_instruments_num = len(self.get_current_instruments_tickers())
+        container = self.driver.find_element_by_xpath(
+            f"//div[@class='bucket-instrument-personalisation' and .//div[text()='{ticker}']]"
+        )
+        delete_button = container.find_element_by_css_selector(".close-button")
+        delete_button.click()
+        self.wait_for(".popup-content .dialog")
+        confirm_button = self.driver.find_element_by_css_selector(
+            ".popup-content .dialog .confirm-button"
+        )
+        confirm_button.click()
+
+        WebDriverWait(self.driver, 10).until(
+            lambda d: len(self.get_current_instruments_tickers())
+            == current_instruments_num - 1
         )
 
     def wait_for_browser_closed(self):
