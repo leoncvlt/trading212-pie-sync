@@ -8,8 +8,6 @@ import random
 import json
 import csv
 
-log = logging.getLogger()
-
 from rich.logging import RichHandler
 from rich.traceback import install as install_rich_tracebacks
 
@@ -18,6 +16,7 @@ from navigator import Navigator
 
 install_rich_tracebacks()
 
+log = logging.getLogger("trading-212-sync")
 
 def main():
     # parse command line arguments
@@ -53,6 +52,8 @@ def main():
     )
     args = argparser.parse_args()
 
+    n = Navigator(get_chromedriver())
+
     # configure logging for the application
     log.setLevel(logging.INFO if not args.verbose else logging.DEBUG)
     rich_handler = RichHandler()
@@ -61,26 +62,26 @@ def main():
     log.propagate = False
 
     # start the application
-    n = Navigator(get_chromedriver())
     data = {"instruments": {}}
     if args.from_json:
         data = json.load(args.from_json)
     elif args.from_csv:
         reader = csv.reader(args.from_csv)
-        data = {rows[0]:rows[1] for rows in reader}
+        data = {rows[0]: rows[1] for rows in reader}
     elif args.from_shared_pie:
         data = n.parse_shared_pie(args.from_shared_pie)
 
     n.open_dashboard(args.username, args.password)
     n.select_pie(args.pie)
     current_instruments = n.get_current_instruments_tickers()
-    for ticker, distrubution in data.items():
-        n.rebalance_instrument(ticker, distrubution)
-    # for ticker in current_instruments:
-    #     n.remove_instrument(ticker)
+    for ticker, distribution in data.items():
+        n.rebalance_instrument(ticker, distribution)
+    unused = [ticker for ticker in current_instruments if ticker not in data.keys()]
+    for ticker in unused:
+        n.remove_instrument(ticker)
     # n.wait_for_browser_closed()
     n.redistribute_pie()
-    input("asd")
+    input()
 
 
 if __name__ == "__main__":
