@@ -6,21 +6,91 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, InvalidSessionIdException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.keys import Keys
+
+import math
 
 log = logging.getLogger(__name__)
 
 
-class instruments_list_found_ticker(object):
-    def __init__(self, instruments, ticker):
-        self.instruments = instruments
+# class InstrumentNotFoundException(Exception):
+# pass
+
+
+# class ResultsNumberChanged(object):
+#     def __init__(self, old_number):
+#         self.old_number = old_number
+
+#     def __call__(self, driver):
+#         new_number = len(
+#             driver.find_elements_by_css_selector(
+#                 ".search-results-content .search-results-instrument"
+#             )
+#         )
+#         return new_number != self.old_number
+
+
+# class instruments_list_found_ticker(object):
+#     def __init__(self, search_field, ticker):
+#         self.search_field = search_field
+#         self.ticker = ticker
+
+#     def get_results(self, driver):
+#         return driver.find_elements_by_css_selector(
+#             ".search-results-content .search-results-instrument"
+#         )
+
+#     def clear(self):
+#         self.search_field.send_keys(Keys.CONTROL + "a")
+#         self.search_field.send_keys(Keys.DELETE)
+
+#     def search(self, term):
+#         self.clear()
+#         self.search_field.send_keys(term)
+
+#     def close(self, driver):
+#         self.clear()
+#         WebDriverWait(driver, 10).until(ResultsNumberChanged(self.last_results_count))
+
+#     def __call__(self, driver):
+#         if not hasattr(self, "last_results_count"):
+#             self.last_results_count = len(self.get_results(driver))
+#         self.search(f"({self.ticker.upper()})")
+#         WebDriverWait(driver, 10).until(ResultsNumberChanged(self.last_results_count))
+#         new_results = self.get_results(driver)
+#         self.last_results_count = len(new_results)
+#         if "no-results" in driver.find_element_by_css_selector(
+#             ".search-results-content"
+#         ).get_attribute("class"):
+#             self.close(driver)
+#             raise InstrumentNotFoundException()
+#         for instrument in new_results:
+#             secondary_name = instrument.find_element_by_css_selector(
+#                 ".cell-name .secondary-name"
+#             ).get_attribute("textContent")
+#             if secondary_name == f"({self.ticker.upper()})":
+#                 self.close(driver)
+#                 return instrument
+#         return False
+
+
+class TickerFoundInInstrumentSearch(object):
+    def __init__(self, search_field, ticker):
+        self.search_field = search_field
         self.ticker = ticker
 
+        self.search_field.send_keys(Keys.CONTROL + "a")
+        self.search_field.send_keys(Keys.DELETE)
+        self.search_field.send_keys(f"({ticker.upper()})")
+
     def __call__(self, driver):
-        if not len(self.instruments):
+        results = driver.find_elements_by_css_selector(
+            ".search-results-content .search-results-instrument"
+        )
+        if not len(results):
             return False
-        for instrument in self.instruments:
+        for instrument in results:
             secondary_name = instrument.find_element_by_css_selector(
                 ".cell-name .secondary-name"
             ).get_attribute("textContent")
@@ -33,10 +103,35 @@ class Navigator:
     def __init__(self, driver):
         self.driver = driver
 
+    # Bunch of higher-level helper methods to make selenium less verbose
     def wait_for(self, selector, timeout=10):
         WebDriverWait(self.driver, timeout).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, selector))
         )
+
+    def wait_for_not(self, selector, timeout=10):
+        WebDriverWait(self.driver, timeout).until_not(
+            EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+        )
+
+    def qS(self, selector):
+        return self.driver.find_element_by_css_selector(selector)
+
+    def qSS(self, selector):
+        return self.driver.find_elements_by_css_selector(selector)
+
+    def wqS(self, selector):
+        self.wait_for(selector)
+        return self.driver.find_element_by_css_selector(selector)
+
+    def qX(self, xpath):
+        return self.driver.find_elements_by_xpath(xpath)
+
+    def send_input(self, field, value):
+        field.send_keys(Keys.CONTROL + "a")
+        field.send_keys(Keys.DELETE)
+        field.send_keys(str(value))
+        field.send_keys("\t")
 
     def open_dashboard(self, username, password):
         self.driver.get("https://live.trading212.com/beta")
@@ -51,18 +146,10 @@ class Navigator:
         self.wait_for(".main-tabs")
 
         # wait until loader has disappeared completely as it can gets in the way of clicks
-        WebDriverWait(self.driver, 10).until_not(
-            EC.presence_of_element_located((By.ID, "platform-loader"))
-        )
-
+        self.wait_for_not("#platform-loader")
         try:
-            onboarding_button = ".account-verification-popup .button"
-            self.driver.find_element_by_css_selector(onboarding_button).click()
-            WebDriverWait(self.driver, 10).until_not(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, ".popup-overlay with-background")
-                )
-            )
+            self.qS(".account-verification-popup .button").click()
+            self.wait_for_not(".popup-overlay with-background")
         except:
             pass
 
@@ -118,8 +205,9 @@ class Navigator:
                 f"//div[@class='bucket-instrument-personalisation' and .//div[text()='{ticker}']]"
             )
         except:
-            self.add_instrument(ticker)
-            self.rebalance_instrument(ticker, target)
+            new_instrument_added = self.add_instrument(ticker)
+            if new_instrument_added:
+                self.rebalance_instrument(ticker, target)
             return
 
         field = container.find_element_by_css_selector(
@@ -130,42 +218,59 @@ class Navigator:
         field.send_keys(str(target))
         field.send_keys(Keys.RETURN)
 
+    def redistribute_pie(self):
+        total_percentage = sum(
+            [
+                float(field.get_attribute("value"))
+                for field in self.qSS(".instrument-share-container .spinner input")
+            ]
+        )
+        offset = 0;
+        if (total_percentage != 100.0):
+            print(total_percentage)
+            for field in self.qSS(".instrument-share-container .spinner input"):
+                old_value = float(field.get_attribute("value"))
+                new_value = round(old_value * 100.0 / total_percentage, 1)
+                print(f"{old_value} > {new_value}")
+                offset += new_value;
+                self.send_input(field, new_value);
+
+            top_holding_field = self.qSS(".instrument-share-container .spinner input")[0]
+            top_value = float(top_holding_field.get_attribute("value"))
+            new_top_value = round(top_value + (100.0 - offset), 1)
+            self.send_input(top_holding_field, new_top_value)
+
     def get_current_instruments_tickers(self):
         ticker_selector = ".bucket-instrument-personalisation .instrument-logo-name"
         return [
-            element.get_attribute("textContent")
-            for element in self.driver.find_elements_by_css_selector(ticker_selector)
+            element.get_attribute("textContent") for element in self.qSS(ticker_selector)
         ]
 
     def add_instrument(self, ticker):
+        # get the amount of current instruments
         current_instruments_num = len(self.get_current_instruments_tickers())
-        add_slice_button = ".button.add-slice-button"
-        self.driver.find_element_by_css_selector(add_slice_button).click()
+        self.qS(".button.add-slice-button").click()
 
-        instrument_search = ".bucket-edit .bucket-add-slices input.search-input"
-        self.wait_for(instrument_search)
-        field = self.driver.find_element_by_css_selector(instrument_search)
-        field.send_keys(Keys.CONTROL + "a")
-        field.send_keys(Keys.DELETE)
-        field.send_keys(f"({ticker.upper()})")
+        search_field = self.wqS(".bucket-edit .bucket-add-slices input.search-input")
+        confirm_button = self.wqS(".bucket-add-slices-footer > .button")
+        try:
+            instrument = WebDriverWait(self.driver, 5).until(
+                TickerFoundInInstrumentSearch(search_field, ticker)
+            )
+        except TimeoutException:
+            log.error(f"Instrument with ticker {ticker} not found!")
+            confirm_button.click()
+            return False
 
-        instruments = self.driver.find_elements_by_css_selector(
-            ".search-results-instrument"
-        )
-        instrument = WebDriverWait(self.driver, 10).until(
-            instruments_list_found_ticker(instruments, ticker)
-        )
-        # TODO: fix occasional staleness
-        add_button = instrument.find_element_by_css_selector(".add-to-bucket")
-        WebDriverWait(self.driver, 10).until_not(EC.staleness_of(add_button))
-        add_button.click()
-        confirm_button = ".bucket-add-slices-footer > .button"
-        self.driver.find_element_by_css_selector(confirm_button).click()
+        self.qS(".add-to-bucket").click()
+        confirm_button.click()
 
+        # wait until the amount of current instruments reflects the addition
         WebDriverWait(self.driver, 10).until(
             lambda d: len(self.get_current_instruments_tickers())
             == current_instruments_num + 1
         )
+        return True
 
     def remove_instrument(self, ticker):
         current_instruments_num = len(self.get_current_instruments_tickers())
@@ -180,14 +285,15 @@ class Navigator:
         )
         confirm_button.click()
 
+        # wait until the amount of current instruments reflects the deletion
         WebDriverWait(self.driver, 10).until(
             lambda d: len(self.get_current_instruments_tickers())
             == current_instruments_num - 1
         )
 
-    def wait_for_browser_closed(self):
-        while True:
-            try:
-                _ = self.driver.window_handles
-            except InvalidSessionIdException as e:
-                break
+    # def wait_for_browser_closed(self):
+    #     while True:
+    #         try:
+    #             _ = self.driver.window_handles
+    #         except InvalidSessionIdException as e:
+    #             break

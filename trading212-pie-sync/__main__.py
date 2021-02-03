@@ -6,6 +6,7 @@ import logging
 import argparse
 import random
 import json
+import csv
 
 log = logging.getLogger()
 
@@ -38,6 +39,12 @@ def main():
         "with the format {'instruments': { [ticker]: [percentage], ... }}",
     )
     argparser.add_argument(
+        "--from-csv",
+        type=argparse.FileType("r"),
+        help="Parse the list of instruments to update from a .csv file "
+        "with the format [ticker],[percentage] for each line }}",
+    )
+    argparser.add_argument(
         "--from-shared-pie",
         help="Parse the list of instruments to update from the URL of a shared pie",
     )
@@ -58,17 +65,22 @@ def main():
     data = {"instruments": {}}
     if args.from_json:
         data = json.load(args.from_json)
+    elif args.from_csv:
+        reader = csv.reader(args.from_csv)
+        data = {rows[0]:rows[1] for rows in reader}
     elif args.from_shared_pie:
         data = n.parse_shared_pie(args.from_shared_pie)
 
     n.open_dashboard(args.username, args.password)
     n.select_pie(args.pie)
     current_instruments = n.get_current_instruments_tickers()
-    # for ticker, distrubution in data["instruments"].items():
-    #     n.rebalance_instrument(ticker, distrubution)
-    for ticker in current_instruments:
-        n.remove_instrument(ticker)
+    for ticker, distrubution in data.items():
+        n.rebalance_instrument(ticker, distrubution)
+    # for ticker in current_instruments:
+    #     n.remove_instrument(ticker)
     # n.wait_for_browser_closed()
+    n.redistribute_pie()
+    input("asd")
 
 
 if __name__ == "__main__":
