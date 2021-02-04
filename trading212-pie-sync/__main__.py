@@ -18,6 +18,7 @@ install_rich_tracebacks()
 
 log = logging.getLogger("trading-212-sync")
 
+
 def main():
     # parse command line arguments
     argparser = argparse.ArgumentParser(
@@ -72,7 +73,12 @@ def main():
         data = n.parse_shared_pie(args.from_shared_pie)
 
     n.open_dashboard(args.username, args.password)
-    n.select_pie(args.pie)
+    pie = n.select_pie(args.pie)
+    if not pie:
+        log.info(
+            "Creating new pie - please set the name manually once instruments have been added"
+        )
+        n.create_new_pie()
     current_instruments = n.get_current_instruments_tickers()
     for ticker, distribution in data.items():
         n.rebalance_instrument(ticker, distribution)
@@ -81,7 +87,7 @@ def main():
         n.remove_instrument(ticker)
     # n.wait_for_browser_closed()
     n.redistribute_pie()
-    input()
+    input("Confirm changes and then press Enter to close the browser...")
 
 
 if __name__ == "__main__":

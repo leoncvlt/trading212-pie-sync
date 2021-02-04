@@ -32,7 +32,7 @@ class TickerFoundInInstrumentSearch(object):
                 ".cell-name .secondary-name"
             ).get_attribute("textContent")
             if secondary_name == f"({self.ticker.upper()})":
-                return instrument
+                return instrument.get_attribute("data-qa-code")
         return False
 
 
@@ -57,8 +57,8 @@ class Navigator:
     def qSS(self, selector):
         return self.driver.find_elements_by_css_selector(selector)
 
-    def wqS(self, selector):
-        self.wait_for(selector)
+    def wqS(self, selector, timeout=10):
+        self.wait_for(selector, timeout)
         return self.driver.find_element_by_css_selector(selector)
 
     def qX(self, xpath):
@@ -119,12 +119,23 @@ class Navigator:
         self.qS(".main-tabs div.portfolio-icon").click()
         self.wait_for(".portfolio-section .investments-section")
         self.wqS(".investments-section div[data-qa-tab=buckets]").click()
-        self.wqS(f".buckets-list .bucket-item[data-qa-item={pie_name}]").click()
+        try:
+            self.wqS(
+                f".buckets-list .bucket-item[data-qa-item={pie_name}]", timeout=5
+            ).click()
+        except TimeoutException:
+            log.error(f"Pie {pie_name} not found!")
+            return False
         self.wqS(
             ".bucket-advanced-tabs .bucket-advanced-tab[data-qa-tab=holdings]"
         ).click()
         self.wqS(".edit-bucket-button").click()
         self.wait_for(".bucket-customisation")
+        return True
+
+    def create_new_pie(self):
+        self.wqS(f".buckets-list .bucket-creation-button").click()
+        self.wqS(f".bucket-creation .add-instruments .button").click()
 
     def rebalance_instrument(self, ticker, target):
         try:
@@ -137,11 +148,12 @@ class Navigator:
                 self.rebalance_instrument(ticker, target)
             return
 
-        log.info(f"Rebalacing {ticker} to {target}%")
         field = container.find_element_by_css_selector(
             ".instrument-share-container .spinner input"
         )
-        self.send_input(field, str(target))
+        if float(field.get_attribute("value") != target):
+            log.info(f"Rebalacing {ticker} to {target}%")
+            self.send_input(field, str(target))
 
     def redistribute_pie(self):
         total_percentage = sum(
@@ -176,12 +188,26 @@ class Navigator:
     def add_instrument(self, ticker):
         # get the amount of current instruments
         current_instruments_num = len(self.get_current_instruments_tickers())
-        self.qS(".button.add-slice-button").click()
 
-        search_field = self.wqS(".bucket-edit .bucket-add-slices input.search-input")
-        confirm_button = self.wqS(".bucket-add-slices-footer > .button")
         try:
-            instrument = WebDriverWait(self.driver, 5).until(
+            # if the 'add slices to pie' popup already open? (happens on pie creation)
+            self.qS(".bucket-creation .bucket-add-slices")
+        except:
+            # if not, click the 'add slice' button to open it
+            self.qS(".button.add-slice-button").click()
+
+        search_field = self.wqS(".bucket-add-slices input.search-input")
+        confirm_button = self.wqS(".bucket-add-slices-footer > .button")
+
+        if current_instruments_num == 50:
+            log.error(
+                f"Can't add {ticker} - maximum amount of instruments in pie reached"
+            )
+            confirm_button.click()
+            return False
+
+        try:
+            instrument_code = WebDriverWait(self.driver, 5).until(
                 TickerFoundInInstrumentSearch(search_field, ticker)
             )
         except TimeoutException:
@@ -189,9 +215,10 @@ class Navigator:
             confirm_button.click()
             return False
 
-        log.info(f"Adding instrument {ticker}")
-        instrument.query_selector(".add-to-bucket").click()
+        self.wqS(f"[data-qa-code='{instrument_code}'] .add-to-bucket").click()
         confirm_button.click()
+
+        log.info(f"Adding instrument {ticker}")
 
         # wait until the amount of current instruments reflects the addition
         WebDriverWait(self.driver, 10).until(
