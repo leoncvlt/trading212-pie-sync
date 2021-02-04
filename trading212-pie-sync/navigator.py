@@ -6,7 +6,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 from selenium.webdriver.common.keys import Keys
 
 log = logging.getLogger(f"trading-212-sync.{__name__}")
@@ -28,11 +28,21 @@ class TickerFoundInInstrumentSearch(object):
         if not len(results):
             return False
         for instrument in results:
-            secondary_name = instrument.find_element_by_css_selector(
-                ".cell-name .secondary-name"
-            ).get_attribute("textContent")
-            if secondary_name == f"({self.ticker.upper()})":
-                return instrument.get_attribute("data-qa-code")
+            try:
+                code = instrument.get_attribute("data-qa-code")
+                cell = driver.find_element_by_css_selector(
+                    f".search-results-instrument[data-qa-code='{code}'"
+                )
+                secondary_name = cell.find_element_by_css_selector(
+                    ".cell-name .secondary-name"
+                )
+                if (
+                    secondary_name.get_attribute("textContent")
+                    == f"({self.ticker.upper()})"
+                ):
+                    return instrument.get_attribute("data-qa-code")
+            except StaleElementReferenceException:
+                pass
         return False
 
 
@@ -173,11 +183,25 @@ class Navigator:
                 log.debug(f"{old_value} →  {new_value}")
                 self.send_input(field, new_value)
 
-            top_holding_field = self.qSS(".instrument-share-container .spinner input")[0]
+            top_holding_field = max(
+                [
+                    holding
+                    for holding in self.qSS(".instrument-share-container .spinner input")
+                ],
+                key=lambda field: float(field.get_attribute("value")),
+            )
             top_value = float(top_holding_field.get_attribute("value"))
             new_top_value = round(top_value + (100.0 - offset), 1)
             log.debug(f"{top_value} →  {new_top_value}")
             self.send_input(top_holding_field, new_top_value)
+
+    def commit_pie_edits(self, name=""):
+        try:
+            name_input = self.qS(".bucket-creation .bucket-personalisation input")
+            self.send_input(name_input, name)
+        except Exception:
+            pass
+        self.qS(".bucket-customisation-footer .complete-button").click()
 
     def get_current_instruments_tickers(self):
         ticker_selector = ".bucket-instrument-personalisation .instrument-logo-name"
@@ -242,10 +266,3 @@ class Navigator:
             lambda d: len(self.get_current_instruments_tickers())
             == current_instruments_num - 1
         )
-
-    # def wait_for_browser_closed(self):
-    #     while True:
-    #         try:
-    #             _ = self.driver.window_handles
-    #         except InvalidSessionIdException as e:
-    #             break

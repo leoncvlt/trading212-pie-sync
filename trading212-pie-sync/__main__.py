@@ -49,6 +49,12 @@ def main():
         help="Parse the list of instruments to update from the URL of a shared pie",
     )
     argparser.add_argument(
+        "-c",
+        "--await-confirm",
+        action="store_true",
+        help="Do not commit changes automatically",
+    )
+    argparser.add_argument(
         "-v", "--verbose", action="store_true", help="Increase output log verbosity"
     )
     args = argparser.parse_args()
@@ -75,9 +81,6 @@ def main():
     n.open_dashboard(args.username, args.password)
     pie = n.select_pie(args.pie)
     if not pie:
-        log.info(
-            "Creating new pie - please set the name manually once instruments have been added"
-        )
         n.create_new_pie()
     current_instruments = n.get_current_instruments_tickers()
     for ticker, distribution in data.items():
@@ -85,9 +88,11 @@ def main():
     unused = [ticker for ticker in current_instruments if ticker not in data.keys()]
     for ticker in unused:
         n.remove_instrument(ticker)
-    # n.wait_for_browser_closed()
     n.redistribute_pie()
-    input("Confirm changes and then press Enter to close the browser...")
+    if not args.await_confirm:
+        n.commit_pie_edits()
+    else:
+        input("Confirm changes and then press Enter to close the browser...")
 
 
 if __name__ == "__main__":
