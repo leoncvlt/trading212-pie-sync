@@ -131,7 +131,7 @@ class Navigator:
         self.wqS(".investments-section div[data-qa-tab=buckets]").click()
         try:
             self.wqS(
-                f".buckets-list .bucket-item[data-qa-item={pie_name}]", timeout=5
+                f".buckets-list .bucket-item[data-qa-item='{pie_name}']", timeout=5
             ).click()
         except TimeoutException:
             log.error(f"Pie {pie_name} not found!")
@@ -231,7 +231,7 @@ class Navigator:
             return False
 
         try:
-            instrument_code = WebDriverWait(self.driver, 5).until(
+            instrument_code = WebDriverWait(self.driver, 2).until(
                 TickerFoundInInstrumentSearch(search_field, ticker)
             )
         except TimeoutException:
