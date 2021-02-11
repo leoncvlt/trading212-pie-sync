@@ -22,7 +22,7 @@ log = logging.getLogger("trading-212-sync")
 def main():
     # parse command line arguments
     argparser = argparse.ArgumentParser(
-        description="Syncs Trading212 pies allocation to a shared pie or external source"
+        description="Create and sync Trading212 pies holdings allocations to a shared pie or external source"
     )
     argparser.add_argument(
         "username", help="The email to log into your Trading212 account"
@@ -35,14 +35,14 @@ def main():
     argparser.add_argument(
         "--from-json",
         type=argparse.FileType("r"),
-        help="Parse the list of instruments to update from a .json file "
+        help="Parse the list of holdings to update from a .json file "
         "with the format {'instruments': { [ticker]: [percentage], ... }}",
     )
     argparser.add_argument(
         "--from-csv",
         type=argparse.FileType("r"),
-        help="Parse the list of instruments to update from a .csv file "
-        "with the format [ticker],[percentage] for each line }}",
+        help="Parse the list of holdings to update from a .csv file "
+        "with the format [ticker],[percentage] for each line",
     )
     argparser.add_argument(
         "--from-shared-pie",
@@ -83,11 +83,11 @@ def main():
     if not pie:
         n.create_new_pie()
     current_instruments = n.get_current_instruments_tickers()
-    for ticker, distribution in data.items():
-        n.rebalance_instrument(ticker, distribution)
     unused = [ticker for ticker in current_instruments if ticker not in data.keys()]
     for ticker in unused:
         n.remove_instrument(ticker)
+    for ticker, distribution in data.items():
+        n.rebalance_instrument(ticker, distribution)
     n.redistribute_pie()
     if not args.await_confirm:
         n.commit_pie_edits()
