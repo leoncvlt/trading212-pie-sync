@@ -1,3 +1,4 @@
+import json
 import logging
 
 from selenium import webdriver
@@ -10,6 +11,15 @@ from selenium.common.exceptions import StaleElementReferenceException, TimeoutEx
 from selenium.webdriver.common.keys import Keys
 
 log = logging.getLogger(f"trading-212-sync.{__name__}")
+
+subsitutions = {
+    "700": "NTO",
+    "7974": "TCEHY",
+    "3659": "NEXOY",
+    "9766": "KNMCY",
+    "9697": "CCOEY",
+    "7832": "NCBDY",
+}
 
 
 class TickerFoundInInstrumentSearch(object):
@@ -153,9 +163,9 @@ class Navigator:
                 f"//div[@class='bucket-instrument-personalisation' and .//div[text()='{ticker}']]"
             )
         except:
-            new_instrument_added = self.add_instrument(ticker)
-            if new_instrument_added:
-                self.rebalance_instrument(ticker, target)
+            added_ticker = self.add_instrument(ticker)
+            if added_ticker:
+                self.rebalance_instrument(added_ticker, target)
             return
 
         field = container.find_element_by_css_selector(
@@ -209,9 +219,10 @@ class Navigator:
             element.get_attribute("textContent") for element in self.qSS(ticker_selector)
         ]
 
-    def add_instrument(self, ticker):
+    def add_instrument(self, ticker, current_instruments_num=None):
         # get the amount of current instruments
-        current_instruments_num = len(self.get_current_instruments_tickers())
+        if not current_instruments_num:
+            current_instruments_num = len(self.get_current_instruments_tickers())
 
         try:
             # if the 'add slices to pie' popup already open? (happens on pie creation)
@@ -236,8 +247,14 @@ class Navigator:
             )
         except TimeoutException:
             log.error(f"Instrument {ticker} not found!")
-            confirm_button.click()
-            return False
+            if ticker in subsitutions:
+                old_ticker = ticker
+                ticker = subsitutions[old_ticker]
+                log.debug(f"Re-trying with ticker {old_ticker} substitution {ticker}")
+                return self.add_instrument(ticker, current_instruments_num)
+            else:
+                confirm_button.click()
+                return False
 
         self.wqS(f"[data-qa-code='{instrument_code}'] .add-to-bucket").click()
         confirm_button.click()
@@ -249,7 +266,7 @@ class Navigator:
             lambda d: len(self.get_current_instruments_tickers())
             == current_instruments_num + 1
         )
-        return True
+        return ticker
 
     def remove_instrument(self, ticker):
         current_instruments_num = len(self.get_current_instruments_tickers())
