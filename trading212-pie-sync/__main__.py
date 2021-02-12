@@ -1,17 +1,16 @@
-__version__ = "0.1.0"
-
 import os
 import sys
 import logging
 import argparse
-import random
 import json
 import csv
+
+from selenium.common.exceptions import InvalidArgumentException
 
 from rich.logging import RichHandler
 from rich.traceback import install as install_rich_tracebacks
 
-from driver import get_chromedriver
+from driver import ChromeDriver
 from navigator import Navigator
 
 install_rich_tracebacks()
@@ -59,14 +58,23 @@ def main():
     )
     args = argparser.parse_args()
 
-    n = Navigator(get_chromedriver())
-
     # configure logging for the application
     log.setLevel(logging.INFO if not args.verbose else logging.DEBUG)
     rich_handler = RichHandler()
     rich_handler.setFormatter(logging.Formatter(fmt="%(message)s", datefmt="[%X]"))
     log.addHandler(rich_handler)
     log.propagate = False
+
+    # initialize chromedriver
+    try:
+        driver = ChromeDriver()
+        n = Navigator(driver)
+    except InvalidArgumentException as e:
+        log.error(
+            f"Error initalising ChromeDriver: {e}"
+            + "Is another automated Chrome window still open?"
+        )
+        sys.exit(0)
 
     # start the application
     data = {"instruments": {}}
@@ -79,20 +87,19 @@ def main():
         data = n.parse_shared_pie(args.from_shared_pie)
 
     n.open_dashboard(args.username, args.password)
-    pie = n.select_pie(args.pie)
-    if not pie:
-        n.create_new_pie()
+    n.select_pie(args.pie)
     current_instruments = n.get_current_instruments_tickers()
     unused = [ticker for ticker in current_instruments if ticker not in data.keys()]
     for ticker in unused:
         n.remove_instrument(ticker)
     for ticker, distribution in data.items():
         n.rebalance_instrument(ticker, distribution)
-    n.redistribute_pie()
+    n.rebalance_pie()
     if not args.await_confirm:
-        n.commit_pie_edits()
+        n.commit_pie_edits(name=args.pie)
     else:
         input("Confirm changes and then press Enter to close the browser...")
+    input()
 
 
 if __name__ == "__main__":
