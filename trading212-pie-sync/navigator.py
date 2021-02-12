@@ -82,25 +82,32 @@ class Navigator:
             pass
 
     def parse_shared_pie(self, url):
+        # navigate to the shared pie page and wait for it to load fully
         self.driver.get(url)
         WebDriverWait(self.driver, 10).until_not(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div[role=progressbar]"))
         )
+        # parsing shared pie pages is a pain!
+        # all the classes names are scrambled so we'll do all our parsing by XPaths
+        # querying styling. This will likely require maintenance in the future
         instruments_xpath = "//div[contains(@style,'border-left-color') and contains(@style,'background-color: rgb(254, 254, 254)')]"
         instruments = qXX(self.driver, instruments_xpath)
-        # TODO: wait until instruments > 0
+        WebDriverWait(self.driver, 10).until(lambda d: len(instruments) > 0)
 
         container = qX(instruments[0], "./../..")
+        # expands the instruments container height or else the driver will fail to
+        # access them as they will be hidden by the overflow
         self.driver.execute_script("arguments[0].style='height: auto'", container)
-        data = {}
+
+        holdings = {}
         for instrument in instruments:
             ticker = qX(
                 instrument,
                 ".//div[contains(@style,'color: rgb(116, 121, 128)') and contains(@style, 'font-size: 12px;')]",
             ).text
-            distribution = qX(instrument, ".//div[contains(text(), '%')]").text
-            data[ticker] = float(distribution.strip("%"))
-        return {"instruments": data}
+            target = qX(instrument, ".//div[contains(text(), '%')]").text
+            holdings[ticker] = float(target.strip("%"))
+        return holdings
 
     def select_pie(self, pie_name):
         # click the portfolio section, wait for it to load and then open the pies tab

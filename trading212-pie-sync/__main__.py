@@ -99,7 +99,6 @@ def main():
         n.commit_pie_edits(name=args.pie)
     else:
         input("Confirm changes and then press Enter to close the browser...")
-    input()
 
 
 if __name__ == "__main__":
