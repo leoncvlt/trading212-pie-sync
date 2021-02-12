@@ -35,7 +35,7 @@ def main():
         "--from-json",
         type=argparse.FileType("r"),
         help="Parse the list of holdings to update from a .json file "
-        "with the format {'instruments': { [ticker]: [percentage], ... }}",
+        "with the format { [ticker]: [percentage], ... }",
     )
     argparser.add_argument(
         "--from-csv",
@@ -51,7 +51,7 @@ def main():
         "-c",
         "--await-confirm",
         action="store_true",
-        help="Do not commit changes automatically",
+        help="Do not commit changes automatically and wait for user to confirm",
     )
     argparser.add_argument(
         "-v", "--verbose", action="store_true", help="Increase output log verbosity"

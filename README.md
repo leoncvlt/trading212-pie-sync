@@ -1,24 +1,50 @@
-# python-poetry
+# trading212-pie-sync
 
-A template project for a modern python script / tool with pretty logs and other development goodies
+A python tool to automatically create / update Trading212 pies and sync their holdings' allocations to another shared pie or external source
 
-## Powered by
-- [Python](https://www.python.org/) >= 3.6
-- [Poetry](https://python-poetry.org/) for dependency management
-- [Taskipy](https://github.com/illBeRoy/taskipy) for npm-style script commands
+## Installation & Requirements
 
-## Development notes
-
-The application entry point is the `__main__.py` file inside the `application` folder (package). This way, the user can execute the script by simply running `python application`.
-
-During development, you can also start the script with a taskipy task by running `poetry run task start`.
-
-The Black formatter is included in the devdependencies - when using Visual Studio Code, you can format the code by pressing `Shift+Alt+F`. Make sure that Black is selected as Python's formatting provider in the extension settings.
-
-The application starts by parsing the command line arguments with `argparse`, then sets up logging (with colors using [colorama](https://github.com/tartley/colorama) if possible), then runs the logic. `KeyboardInterrupts` can be used to stopped the application and are handled gracefully.
-
-A `requirements.txt` file for the required dependencies can be exported from the poetry configuration by running `poetry run task freeze`.
-
-You can instruct the end-users to install the required dependencies by running
-- `poetry install --no-dev` if [Poetry](https://python-poetry.org/) is installed
+Make sure you're in your virtual environment of choice, then run
+- `poetry install --no-dev` if you have [Poetry](https://python-poetry.org/) installed
 - `pip install -r requirements.txt` otherwise
+
+## Usage
+```
+trading212-pie-sync [-h] [--from-json FROM_JSON] [--from-csv FROM_CSV] [--from-shared-pie FROM_SHARED_PIE] [-c] [-v] username password pie
+
+positional arguments:
+  username              The email to log into your Trading212 account
+  password              The password to log into your Trading212 account
+  pie                   The name of the pie to update (case-sensitive)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --from-json FROM_JSON
+                        Parse the list of holdings to update from a .json file with the format { [ticker]: [percentage], ... }}
+  --from-csv FROM_CSV   Parse the list of holdings to update from a .csv file with the format [ticker],[percentage] for each line
+  --from-shared-pie FROM_SHARED_PIE
+                        Parse the list of instruments to update from the URL of a shared pie
+  -c, --await-confirm   Do not commit changes automatically and wait for user to confirm
+  -v, --verbose         Increase output log verbosity
+```
+
+## Explanation
+[Trading212](trading212.com) pies are great! But editing allocations can be time consuming for pies with a lot of holdings, especially if you prefer a "set-and-forget" investement strategy. Moreover, while the social aspect of pie sharing is encouraged, once you copy someone's else pie it won't automatically update when the original changes, making the copy of actively-managed pies a bit pointless.
+
+This script attempts to solve both problems by automating the process of updating a pie's holdings from another shared pie, or an external file.
+
+Since Trading212 lacks an API (which is apparently in the works), this tool uses an automated Chromedriver window to perform all operations on your pies.
+
+To start, supply the tool with your Trading212's email, password and the target pie name (case-sensitive, will be created if it doesn't exists):
+`python trading212-pie-sync myname@email.com meg@mypassword "My Pie"`
+
+Then, supply a data source to fetch the holdings information from:
+- `--from-shared-pie https://www.trading212.com/pies/thesharedpieurl`: mirrors a shared pie's holdings allocation. Make sure the pie is public and the URL exists.
+- `--from-csv my_csv_file.csv`: reads the holdings allocation from a .csv file. The format is `[ticker],[percentage]` for each line. My other tool [etf4u](https://github.com/leoncvlt/etf4u) scrapes and exports ETF funds allocations data in this format.
+- `--from-json my_json_file.file`: reads the holdings allocation from a .json file. The format is `{ [ticker]: [percentage], ... }` for each line.
+
+Finally, pass the `--c` flag if you don't trust the script and want to review all changes before commiting the pie edits.
+
+## Known Bugs
+- Keep the automated window on the front / don't minimized it while it's running, or else it might jam the process.
+- Once in a blue moon, you might get a `StaleElementException` - simply restart the script in that case.
