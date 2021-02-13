@@ -20,10 +20,12 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   --from-json FROM_JSON
-                        Parse the list of holdings to update from a .json file with the format { [ticker]: [percentage], ... }}
-  --from-csv FROM_CSV   Parse the list of holdings to update from a .csv file with the format [ticker],[percentage] for each line
+                        Parse the list of holdings to update from this .json file with the format { [ticker]: [percentage], ... }
+  --from-csv FROM_CSV   Parse the list of holdings to update from this .csv file with the format [ticker],[percentage] for each line
   --from-shared-pie FROM_SHARED_PIE
                         Parse the list of instruments to update from the URL of a shared pie
+  --substitutions SUBSTITUTIONS
+                        Parse a list of replacement tickers from this .json file, To be used when a ticker is not found. The list format is { [original ticker]: [ticker to use if original not found], ... }
   -c, --await-confirm   Do not commit changes automatically and wait for user to confirm
   -v, --verbose         Increase output log verbosity
 ```
@@ -45,6 +47,10 @@ Then, supply a data source to fetch the holdings information from:
 
 Finally, pass the `--c` flag if you don't trust the script and want to review all changes before commiting the pie edits.
 
+### Instruments substitutions
+Not all stocks might be available on Trading212 - if one of the sources you are syncing changes with contains a stock that you is not present on the platform, you can set a up a substitution for it by editing the `substitutions.json` file and adding an entry with the format `[original ticker]: [ticker to use if original not found]`. Alternatively, you can use your own substitutions json file with the flag `--substitutions`.
+
 ## Known Bugs
 - Keep the automated window on the front / don't minimized it while it's running, or else it might jam the process.
 - Once in a blue moon, you might get a `StaleElementException` - simply restart the script in that case.
+- If the process appears to stop at some point / clicking / opening the wrong things, try deleting the `profile` folder (which contains cookies and settings for the automated browser session)

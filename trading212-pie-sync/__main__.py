@@ -34,18 +34,26 @@ def main():
     argparser.add_argument(
         "--from-json",
         type=argparse.FileType("r"),
-        help="Parse the list of holdings to update from a .json file "
+        help="Parse the list of holdings to update from this .json file "
         "with the format { [ticker]: [percentage], ... }",
     )
     argparser.add_argument(
         "--from-csv",
         type=argparse.FileType("r"),
-        help="Parse the list of holdings to update from a .csv file "
+        help="Parse the list of holdings to update from this .csv file "
         "with the format [ticker],[percentage] for each line",
     )
     argparser.add_argument(
         "--from-shared-pie",
         help="Parse the list of instruments to update from the URL of a shared pie",
+    )
+    argparser.add_argument(
+        "--substitutions",
+        type=argparse.FileType("r"),
+        default="substitutions.json",
+        help="Parse a list of replacement tickers from this .json file, "
+        "To be used when a ticker is not found. The list format is "
+        "{ [original ticker]: [ticker to use if original not found], ... }",
     )
     argparser.add_argument(
         "-c",
@@ -90,10 +98,11 @@ def main():
     n.select_pie(args.pie)
     current_instruments = n.get_current_instruments_tickers()
     unused = [ticker for ticker in current_instruments if ticker not in data.keys()]
+    substitutions = json.load(args.substitutions) if args.substitutions else {}
     for ticker in unused:
         n.remove_instrument(ticker)
     for ticker, distribution in data.items():
-        n.rebalance_instrument(ticker, distribution)
+        n.rebalance_instrument(ticker, distribution, substitutions)
     n.rebalance_pie()
     if not args.await_confirm:
         n.commit_pie_edits(name=args.pie)

@@ -15,15 +15,6 @@ from driver import qS, qSS, wqS, qX, qXX, wait_for, wait_for_not, send_input
 
 log = logging.getLogger(f"trading-212-sync.{__name__}")
 
-subsitutions = {
-    "700": "NTO",
-    "7974": "TCEHY",
-    "3659": "NEXOY",
-    "9766": "KNMCY",
-    "9697": "CCOEY",
-    "7832": "NCBDY",
-}
-
 # A custom selenium wait condition that waits until an instrument with a
 # specific ticker appears in the instruments search bar and returns the
 # [data-qa-code] attribute for that instrument's cell
@@ -80,6 +71,7 @@ class Navigator:
             wait_for_not(self.driver, ".popup-overlay with-background")
         except:
             pass
+        wait_for(self.driver, ".main-tabs")
 
     def parse_shared_pie(self, url):
         # navigate to the shared pie page and wait for it to load fully
@@ -111,7 +103,7 @@ class Navigator:
 
     def select_pie(self, pie_name):
         # click the portfolio section, wait for it to load and then open the pies tab
-        qS(self.driver, ".main-tabs div.portfolio-icon").click()
+        wqS(self.driver, ".main-tabs div.portfolio-icon").click()
         wait_for(self.driver, ".portfolio-section .investments-section")
         wqS(self.driver, ".investments-section div[data-qa-tab=buckets]").click()
         try:
@@ -203,7 +195,7 @@ class Navigator:
             for element in qSS(self.driver, ticker_selector)
         ]
 
-    def rebalance_instrument(self, ticker, target):
+    def rebalance_instrument(self, ticker, target, substitutions={}):
         # round up to one decimal digit since that's the max decimal numbers
         # theat the pie instrument spinner field support
         target = round(float(target), 1)
@@ -218,7 +210,7 @@ class Navigator:
         except:
             # if not, add the instrument and attempt the re-balancing again
             # once the instrument has been added
-            added_ticker = self.add_instrument(ticker)
+            added_ticker = self.add_instrument(ticker, substitutions=substitutions)
             if added_ticker:
                 self.rebalance_instrument(added_ticker, target)
             return
@@ -229,7 +221,7 @@ class Navigator:
             log.info(f"Rebalacing {ticker} to {target}%")
             send_input(field, str(target))
 
-    def add_instrument(self, ticker, current_instruments_num=None):
+    def add_instrument(self, ticker, current_instruments_num=None, substitutions={}):
         # get the amount of current instruments
         if not current_instruments_num:
             current_instruments_num = len(self.get_current_instruments_tickers())
@@ -262,13 +254,13 @@ class Navigator:
             )
         except TimeoutException:
             log.error(f"Instrument {ticker} not found!")
-            if ticker in subsitutions:
+            if ticker in substitutions:
                 # if the ticker was not found, see if we defined any replacement tickers
                 # for it and re-attempt the adding process
                 old_ticker = ticker
-                ticker = subsitutions[old_ticker]
+                ticker = substitutions[old_ticker]
                 log.debug(f"Re-trying with ticker {old_ticker} substitution {ticker}")
-                return self.add_instrument(ticker, current_instruments_num)
+                return self.add_instrument(ticker, current_instruments_num, substitutions)
             else:
                 # if not, don't add any instruments and close the search window
                 confirm_button.click()
