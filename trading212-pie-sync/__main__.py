@@ -97,13 +97,17 @@ def main():
     n.open_dashboard(args.username, args.password)
     n.select_pie(args.pie)
     current_instruments = n.get_current_instruments_tickers()
-    unused = [ticker for ticker in current_instruments if ticker not in data.keys()]
+    unused = [
+        ticker
+        for ticker in current_instruments
+        if ticker not in data.keys() or round(float(data[ticker]), 1) < 0.5
+    ]
     substitutions = json.load(args.substitutions) if args.substitutions else {}
     for ticker in unused:
         n.remove_instrument(ticker)
     for ticker, distribution in data.items():
         n.rebalance_instrument(ticker, distribution, substitutions)
-    n.rebalance_pie()
+    n.redistribute_pie()
     if not args.await_confirm:
         n.commit_pie_edits(name=args.pie)
     else:

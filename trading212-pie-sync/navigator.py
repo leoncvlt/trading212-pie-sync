@@ -1,5 +1,7 @@
 import json
 import logging
+from decimal import Decimal, getcontext
+from math import copysign, remainder
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -130,46 +132,87 @@ class Navigator:
         wqS(self.driver, ".edit-bucket-button").click()
         wait_for(self.driver, ".bucket-customisation")
 
-    def rebalance_pie(self):
-        # get the total percentage of all instruments' target in the pie
-        total_percentage = sum(
-            [
-                float(field.get_attribute("value"))
-                for field in qSS(
-                    self.driver, ".instrument-share-container .spinner input"
-                )
-            ]
+    def get_pie_distribution(self):
+        return float(
+            qS(
+                self.driver,
+                ".bucket-customisation-footer .slices-distribution-indicator",
+            )
+            .get_attribute("textContent")
+            .strip("%")
         )
-        total_percentage = round(total_percentage, 1)
-        offset = 0
+
+    def redistribute_pie(self):
+        # get the total percentage of all instruments' target in the pie
+        total_percentage = self.get_pie_distribution()
+        total_redistributed = Decimal(0.0)
+        rebalanced = False
         if total_percentage != 100.0:
-            # if the percentage is less than 100, spread the remaining value
-            # proportionally to each instrument according to their targets
-            log.info(f"Total pie percentage is {total_percentage}, rebalancing to 100%")
-            for field in qSS(self.driver, ".instrument-share-container .spinner input"):
+            # if the total allocation percentage is less than 100, redistribute
+            # the remaining value across all instruments
+            log.info(f"Total pie percentage is {total_percentage}, redistributing to 100%")
+            containers = ".bucket-customisation .bucket-instruments-personalisation .bucket-instrument-personalisation"
+            for container in qSS(self.driver, containers):
+                field = qS(container, ".instrument-share-container .spinner input")
+                ticker = (
+                    qS(container, ".instrument-logo-name")
+                    .get_attribute("textContent")
+                    .strip()
+                )
+
+                # go through each instrument container, and spread the remainder
+                # proportionally according to its targets weight
                 old_value = float(field.get_attribute("value"))
                 new_value = round(old_value * 100.0 / total_percentage, 1)
-                offset += new_value
-                log.debug(f"{old_value} → {new_value}")
-                send_input(field, new_value)
 
-            # if there's a remainder afterwards due to floating error calculations,
-            # just add it to the top holding in the pie
-            # TODO: This sometimes is a negative value, might be worth to spread it
-            # TODO: among the lowest weighted instruments in the case
-            top_holding_field = max(
-                [
-                    holding
-                    for holding in qSS(
-                        self.driver, ".instrument-share-container .spinner input"
+                # if the total redistribution is going to exceed 100, clamp the value
+                if (total_redistributed + Decimal(new_value)) > 100.0:
+                    rebalanced = True
+                    new_value = round((Decimal(100.0) - total_redistributed), 1)
+
+                # set the new redistributed value for the target
+                total_redistributed += Decimal(new_value)
+                if new_value != old_value:
+                    log.debug(f"Redistributing {ticker}: {old_value} → {new_value}")
+                    send_input(field, new_value)
+
+                if rebalanced:
+                    break
+
+            # if the pie distribution percentage still doesn't amount to 100%
+            # after redistribution (likely due to floating point calculation errors)
+            # spread the reminder across the top holdings (if positive), or subtract
+            # it from the bottom ones (if negative) until we reach 100%
+            distribution = self.get_pie_distribution()
+            if distribution != 100.0:
+                remainder = Decimal(100.0) - Decimal(distribution)
+                log.debug(
+                    f"Spreading out redistribution remainder ({round(remainder, 1)})"
+                )
+                fields = [
+                    field
+                    for field in qSS(
+                        self.driver,
+                        ".instrument-share-container .spinner input",
                     )
-                ],
-                key=lambda field: float(field.get_attribute("value")),
-            )
-            top_value = float(top_holding_field.get_attribute("value"))
-            new_top_value = round(top_value + (100.0 - offset), 1)
-            log.debug(f"{top_value} → {new_top_value}")
-            send_input(top_holding_field, new_top_value)
+                ]
+                fields.sort(
+                    reverse=remainder > 0,
+                    key=lambda field: Decimal(field.get_attribute("value")),
+                )
+                for field in fields:
+                    value = float(field.get_attribute("value"))
+                    # Trading212 allocation values can't go under 0.5
+                    # so if we have a negative remainder and the current holding being
+                    # shaved off has a 0.5 allocation, skip it for the next lowest one
+                    if remainder < 0 and value == 0.5:
+                        continue
+                    offset = Decimal(copysign(0.1, remainder))
+                    new_value = round(Decimal(value) + offset, 1)
+                    send_input(field, new_value)
+                    remainder = remainder - offset
+                    if round(remainder, 1) == 0.0:
+                        break
 
     def commit_pie_edits(self, name=""):
         try:
@@ -199,6 +242,11 @@ class Navigator:
         # round up to one decimal digit since that's the max decimal numbers
         # theat the pie instrument spinner field support
         target = round(float(target), 1)
+        if target < 0.5:
+            # skip allocations smaller than 0.5 as that's the minimum weight
+            # value supported by Trading212
+            log.warning(f"Ticker {ticker}'s target weight is less than 0.5, skipping...")
+            return
 
         try:
             # check if the instrument container with the specified ticker exists
@@ -217,9 +265,10 @@ class Navigator:
 
         # set the rebalanced value on the instrument's target input field
         field = qS(container, ".instrument-share-container .spinner input")
-        if float(field.get_attribute("value") != target):
-            log.info(f"Rebalacing {ticker} to {target}%")
-            send_input(field, str(target))
+        previous_value = float(field.get_attribute("value"))
+        if previous_value != target:
+            log.info(f"Rebalacing {ticker}: {previous_value} → {target}")
+            send_input(field, target)
 
     def add_instrument(self, ticker, current_instruments_num=None, substitutions={}):
         # get the amount of current instruments
