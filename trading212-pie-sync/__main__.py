@@ -23,13 +23,24 @@ def main():
     argparser = argparse.ArgumentParser(
         description="Create and sync Trading212 pies holdings allocations to a shared pie or external source"
     )
+
     argparser.add_argument(
-        "username", help="The email to log into your Trading212 account"
+        "--fetch-available-equities",
+        type=argparse.FileType("w"),
+        help="Fetch the list of available equieties to trade on Trading212 invest and save it to this file. "
+        "when using this option, there's no need to supply email, password or pie name.",
     )
-    argparser.add_argument(
-        "password", help="The password to log into your Trading212 account"
-    )
-    argparser.add_argument("pie", help="The name of the pie to update (case-sensitive)")
+
+    if not "--fetch-available-equities" in sys.argv:
+        argparser.add_argument(
+            "username", help="The email to log into your Trading212 account"
+        )
+        argparser.add_argument(
+            "password", help="The password to log into your Trading212 account"
+        )
+        argparser.add_argument(
+            "pie", help="The name of the pie to update (case-sensitive)"
+        )
 
     argparser.add_argument(
         "--from-json",
@@ -82,6 +93,13 @@ def main():
             f"Error initalising ChromeDriver: {e}"
             + "Is another automated Chrome window still open?"
         )
+        sys.exit(0)
+
+    if args.fetch_available_equities:
+        file = args.fetch_available_equities
+        instruments = n.get_available_instruments()
+        file.write(" ".join(instruments))
+        log.info(f"Exported {len(instruments)} instruments to {file.name}")
         sys.exit(0)
 
     # start the application

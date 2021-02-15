@@ -351,3 +351,16 @@ class Navigator:
             lambda d: len(self.get_current_instruments_tickers())
             == current_instruments_num - 1
         )
+
+    def get_available_instruments(self):
+        self.driver.get("https://www.trading212.com/en/Trade-Equities")
+        wait_for(self.driver, "#all-equities")
+        # cells = qSS(self.driver, "#all-equities [data-label='Instrument']")
+        # instruments = [cell.get_attribute("textContent") for cell in cells]
+
+        # using javascript is orders of magnitude faster than fetching the same
+        # data with selenium
+        instruments = self.driver.execute_script(
+            "return Array.from(document.querySelectorAll(\"#all-equities [data-label='Instrument']\")).map(e => e.textContent)"
+        )
+        return instruments
