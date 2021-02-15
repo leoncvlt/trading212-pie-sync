@@ -9,7 +9,6 @@ python = "^3.6.1"
 rich = "^9.10.0"
 selenium = "^3.141.0"
 chromedriver-autoinstaller = "^0.2.2"
-pyppeteer = "^0.2.5"
 
 [tool.poetry.dev-dependencies]
 taskipy = "^1.6.0"
