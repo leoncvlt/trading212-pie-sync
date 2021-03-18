@@ -132,17 +132,28 @@ class Navigator:
         wqS(self.driver, ".edit-bucket-button").click()
         wait_for(self.driver, ".bucket-customisation")
 
-    def get_pie_distribution(self):
-        return float(
-            qS(
-                self.driver,
-                ".bucket-customisation-footer .slices-distribution-indicator",
-            )
-            .get_attribute("textContent")
-            .strip("%")
-        )
+    # def get_pie_distribution(self):
+    #     return float(
+    #         qS(
+    #             self.driver,
+    #             ".bucket-customisation-footer .slices-distribution-indicator",
+    #         )
+    #         .get_attribute("textContent")
+    #         .strip("%")
+    #     )
 
     def redistribute_pie(self):
+        # Trading212 now has a dedicated button for redistributing the pie
+        # proportionally! So convennient.
+        try:
+            qS(self.driver, ".bucket-instruments-personalisation-header .adjust-slices-tooltip").click()
+        except:
+            log.debug("Pie does not need redistribution")
+
+        return;
+        # this code below is the old, lovingly handcrafted method.
+        # couldn't bear myself to delete it!
+        
         # get the total percentage of all instruments' target in the pie
         total_percentage = self.get_pie_distribution()
         total_redistributed = Decimal(0.0)
@@ -269,6 +280,10 @@ class Navigator:
         if previous_value != target:
             log.info(f"Rebalacing {ticker}: {previous_value} → {target}")
             send_input(field, target)
+            # the instrument value gets automatically locked as we do so,
+            # click the unlock button to let the instrument be redistributed afterwards
+            instrument_lock = qS(container, ".lock-unlock-tooltip")
+            instrument_lock.click()
 
     def add_instrument(self, ticker, current_instruments_num=None, substitutions={}):
         # get the amount of current instruments
