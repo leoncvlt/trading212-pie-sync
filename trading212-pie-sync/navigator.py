@@ -53,7 +53,7 @@ class Navigator:
         self.driver = driver
 
     def open_dashboard(self, username, password):
-        self.driver.get("https://live.trading212.com/beta")
+        self.driver.get("https://www.trading212.com/en/login")
 
         try:
             qS(self.driver, "#username-real").send_keys(username)
