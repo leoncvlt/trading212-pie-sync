@@ -37,10 +37,10 @@ class TickerFoundInInstrumentSearch(object):
             try:
                 code = instrument.get_attribute("data-qa-code")
                 cell = qS(driver, f".search-results-instrument[data-qa-code='{code}'")
-                secondary_name = qS(cell, ".cell-name .secondary-name")
+                secondary_name = qS(cell, ".cell-symbol")
                 if (
                     secondary_name.get_attribute("textContent")
-                    == f"({self.ticker.upper()})"
+                    == f"{self.ticker.upper()}"
                 ):
                     return instrument.get_attribute("data-qa-code")
             except StaleElementReferenceException:
@@ -53,11 +53,17 @@ class Navigator:
         self.driver = driver
 
     def open_dashboard(self, username, password):
+        #self.driver.get("https://www.trading212.com")
         self.driver.get("https://www.trading212.com/en/login")
+        #self.driver.get("https://live.trading212.com/beta")
 
         try:
-            qS(self.driver, "#username-real").send_keys(username)
-            qS(self.driver, "#pass-real").send_keys(password)
+            #qS(self.driver, "input[class = header_login-button_daXsh]").click()
+            wait_for(self.driver, "input[type=submit]")
+            qS(self.driver, "input[name=email]").send_keys(username)
+            qS(self.driver, "input[name=password]").send_keys(password)
+            #qS(self.driver, "#username-real").send_keys(username)
+            #qS(self.driver, "#pass-real").send_keys(password)
             qS(self.driver, "input[type=submit]").click()
         except:
             pass
@@ -294,7 +300,7 @@ class Navigator:
             # is the 'add slices to pie' popup already open? (happens on pie creation)
             qS(self.driver, ".bucket-creation .bucket-add-slices")
         except:
-            # if not, click the 'add slice' button to open it
+            #if not, click the 'add slice' button to open it
             qS(self.driver, ".button.add-slice-button").click()
 
         # wait for the search window to fully load
